@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ماز باغ گل‌ها 🌸</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    body {
+      margin: 0;
+      padding: 10px;
+      background: #ffeef8;
+      color: #4a2e35;
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    h1 {
+      margin: 4px 0;
+      font-size: 1.25rem;
+      text-align: center;
+      color: #d81b60;
+    }
+    p.sub {
+      margin: 0 0 10px 0;
+      font-size: 0.82rem;
+      color: #885566;
+      text-align: center;
+    }
+    #game-container {
+      position: relative;
+      background: #ffc1e3;
+      border-radius: 16px;
+      padding: 6px;
+      box-shadow: 0 8px 24px rgba(216, 27, 96, 0.16);
+    }
+    canvas {
+      display: block;
+      background: #fff5fb;
+      border-radius: 10px;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(3, 56px);
+      grid-gap: 8px;
+      margin-top: 12px;
+    }
+    .btn {
+      width: 56px;
+      height: 50px;
+      background: #e91e63;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.35rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px #ad1457;
+      transition: transform 0.05s;
+    }
+    .btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px #ad1457;
+    }
+    .empty { visibility: hidden; }
+
+    #popup {
+      position: fixed;
+      inset: 0;
+      background: rgba(74, 46, 53, 0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+    .popup-card {
+      background: #fff;
+      color: #4a2e35;
+      border-radius: 22px;
+      padding: 24px;
+      width: 100%;
+      max-width: 320px;
+      text-align: center;
+      animation: popIn 0.35s ease-out;
+      box-shadow: 0 10px 30px rgba(216, 27, 96, 0.3);
+      border: 2px solid #ffc1e3;
+    }
+    @keyframes popIn {
+      from { transform: scale(0.7); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .flower-emoji {
+      font-size: 4rem;
+      margin: 5px 0;
+    }
+    .flower-name {
+      font-size: 1.4rem;
+      font-weight: bold;
+      color: #d81b60;
+      margin-bottom: 6px;
+    }
+    .flower-trait {
+      font-size: 1.15rem;
+      color: #ad1457;
+      background: #ffeef8;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-weight: bold;
+      margin: 10px 0 16px 0;
+    }
+    .popup-btn {
+      background: #d81b60;
+      color: #fff;
+      border: none;
+      padding: 10px 22px;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: bold;
+      box-shadow: 0 4px #ad1457;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🌸 ماز باغ گل‌ها 🌸</h1>
+  <p class="sub">راهتو انتخاب کن تا ببینی به کدوم گل می‌رسی!</p>
+
+  <div id="game-container">
+    <canvas id="mazeCanvas"></canvas>
+  </div>
+
+  <div class="controls">
+    <div class="empty"></div>
+    <button class="btn" onclick="move(0, -1)">▲</button>
+    <div class="empty"></div>
+    <button class="btn" onclick="move(-1, 0)">◄</button>
+    <button class="btn" onclick="move(0, 1)">▼</button>
+    <button class="btn" onclick="move(1, 0)">►</button>
+  </div>
+
+  <div id="popup">
+    <div class="popup-card">
+      <div class="flower-emoji" id="popEmoji">🌹</div>
+      <div class="flower-name" id="popName">رز</div>
+      <div class="flower-trait" id="popTrait">قدرت و زیبایی</div>
+      <button class="popup-btn" onclick="resetGame()">شروع دوباره</button>
+    </div>
+  </div>
+
+  <script>
+    const FLOWERS = {
+      rose:      { emoji: "🌹", name: "رز", trait: "قدرت و زیبایی" },
+      tulip:     { emoji: "🌷", name: "لاله", trait: "ظرافت و اصالت" },
+      orchid:    { emoji: "🌸", name: "ارکیده", trait: "خاص بودن" },
+      sunflower: { emoji: "🌻", name: "آفتابگردان", trait: "انرژی و امید" },
+      lotus:     { emoji: "🪷", name: "نیلوفر", trait: "آرامش و لطافت" }
+    };
+
+    // نقشه کاملاً متوازن و باز به همه ۵ مقصد
+    // 0 = راه باز، 1 = دیواره
+    const map = [
+      [1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1], // ورودی ردیف 0، ستون 8
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1],
+      [1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1],
+      [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1],
+      [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+      [1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1],
+      [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+      [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1],
+      [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+      [1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1],
+      [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1],
+      [1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1],
+      [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1],
+      [1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    ];
+
+    // موقعیت ۵ گل در ۴ گوشه و پایین وسط
+    const exits = [
+      { key: "rose",      x: 1,  y: 3 },   // رز: بالا چپ
+      { key: "tulip",     x: 15, y: 3 },   // لاله: بالا راست
+      { key: "orchid",    x: 1,  y: 15 },  // ارکیده: پایین چپ
+      { key: "lotus",     x: 15, y: 15 },  // نیلوفر: پایین راست
+      { key: "sunflower", x: 8,  y: 15 }   // آفتابگردان: پایین وسط
+    ];
+
+    const canvas = document.getElementById("mazeCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const rows = map.length;
+    const cols = map[0].length;
+    let tileSize = 20;
+
+    function resizeCanvas() {
+      const maxWidth = Math.min(window.innerWidth - 30, 360);
+      tileSize = Math.floor(maxWidth / cols);
+      canvas.width = cols * tileSize;
+      canvas.height = rows * tileSize;
+      draw();
+    }
+
+    const startPos = { x: 8, y: 0 };
+    let player = { x: startPos.x, y: startPos.y };
+    let gameWon = false;
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (map[r][c] === 1) {
+            ctx.fillStyle = "#f8bbd0";
+            ctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+            ctx.strokeStyle = "#ffeef8";
+            ctx.strokeRect(c * tileSize, r * tileSize, tileSize, tileSize);
+          } else {
+            ctx.fillStyle = "#fff5fb";
+            ctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+          }
+        }
+      }
+
+      // رسم خروجی‌های گل
+      exits.forEach(ex => {
+        ctx.fillStyle = "#ff80ab";
+        ctx.beginPath();
+        ctx.roundRect(ex.x * tileSize + 1, ex.y * tileSize + 1, tileSize - 2, tileSize - 2, 5);
+        ctx.fill();
+
+        ctx.font = `${Math.floor(tileSize * 0.72)}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(FLOWERS[ex.key].emoji, ex.x * tileSize + tileSize / 2, ex.y * tileSize + tileSize / 2 + 1);
+      });
+
+      // رسم نقطه ورود
+      ctx.fillStyle = "#880e4f";
+      ctx.font = `bold ${Math.floor(tileSize * 0.42)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("ورود", startPos.x * tileSize + tileSize / 2, startPos.y * tileSize + tileSize / 2);
+
+      // رسم مهره بازیکن
+      ctx.beginPath();
+      ctx.arc(
+        player.x * tileSize + tileSize / 2,
+        player.y * tileSize + tileSize / 2,
+        tileSize * 0.38,
+        0,
+        Math.PI * 2
+      );
+      ctx.fillStyle = "#c2185b";
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    function move(dx, dy) {
+      if (gameWon) return;
+      const nx = player.x + dx;
+      const ny = player.y + dy;
+
+      if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+        if (map[ny][nx] !== 1) {
+          player.x = nx;
+          player.y = ny;
+          draw();
+          checkWin();
+        }
+      }
+    }
+
+    function checkWin() {
+      const exitFound = exits.find(e => e.x === player.x && e.y === player.y);
+      if (exitFound) {
+        gameWon = true;
+        showPopup(exitFound.key);
+      }
+    }
+
+    function showPopup(key) {
+      const flower = FLOWERS[key];
+      document.getElementById("popEmoji").innerText = flower.emoji;
+      document.getElementById("popName").innerText = flower.name;
+      document.getElementById("popTrait").innerText = flower.trait;
+      document.getElementById("popup").style.display = "flex";
+    }
+
+    function resetGame() {
+      player = { x: startPos.x, y: startPos.y };
+      gameWon = false;
+      document.getElementById("popup").style.display = "none";
+      draw();
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowUp" || e.key === "w") move(0, -1);
+      if (e.key === "ArrowDown" || e.key === "s") move(0, 1);
+      if (e.key === "ArrowLeft" || e.key === "a") move(-1, 0);
+      if (e.key === "ArrowRight" || e.key === "d") move(1, 0);
+    });
+
+    let touchStartX = 0, touchStartY = 0;
+    window.addEventListener("touchstart", e => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    window.addEventListener("touchend", e => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (Math.abs(dx) > 25) move(dx > 0 ? 1 : -1, 0);
+      } else {
+        if (Math.abs(dy) > 25) move(0, dy > 0 ? 1 : -1);
+      }
+    }, { passive: true });
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+  </script>
+</body>
+</html>
